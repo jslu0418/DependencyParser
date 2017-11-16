@@ -15,8 +15,17 @@ global_null = '<null>'
 dev_mode = 1
 optimizer = {'AdamOptimizer': tf.train.AdamOptimizer,'GradientDescentOptimizer': tf.train.GradientDescentOptimizer}
 # Parameters
-batch_size = 512 # batch size
-valid_batch_size = 128 # valid batch size
+batch_size = int(sys.argv[1]) # batch size
+valid_batch_size = int(sys.argv[2]) # valid batch size
+optimizerIndex=int(sys.argv[3])
+trainsteps=int(sys.argv[4])
+
+
+useOptimizer = optimizer['AdamOptimizer']
+for i,c in enumerate(optimizer.keys()):
+    if i == optimizerIndex:
+        useOptimizer=optimizer[c]
+
 embedding_size = 50 # embedding width
 features_size = 48 # feature size, 48 features
 
@@ -64,21 +73,24 @@ def generate_dev_batch(valid_batch_size):
     global dev_sentence_index # dev_sentence_index
     batch_data = [] # initialize batch_data list
     batch_labels = [] # initialize batch_labels list
+    result_dependencies = []
     while len(batch_data) < valid_batch_size:
         # batch_data's length less than goal
         if dev_sentence_index >= len_dev_dependecies:
             # surpass the total length of dev_data
             dev_sentence_index = dev_sentence_index - len_dev_dependecies # substract total length of dev_data
-        data_in_sentence = extract_features_from_train_data(dev_data[dev_sentence_index], token2id) # extract every status' features in one sentence
+        data_in_sentence, dependencies = extract_features_from_train_data(dev_data[dev_sentence_index], token2id) # extract every status' features in one sentence
         dev_sentence_index += 1 # increase dev sentence index
         batch_data += [e['features'] for e in data_in_sentence] # add several status' features
         batch_labels += [one_hot(class2label[e['op'] + ':' + e['label'][len(label_prefix):]]) for e in data_in_sentence] # add several status' labels
+        result_dependencies = result_dependencies + dependencies
     if len(batch_data) > valid_batch_size:
         # if over 2048, delete redundant
         batch_data = batch_data[:valid_batch_size]
         batch_labels = batch_labels[:valid_batch_size]
+        result_dependencies = result_dependencies[:valid_batch_size]
         dev_sentence_index -= 1
-    return batch_data, batch_labels
+    return batch_data, batch_labels, result_dependencies
 
 def generate_batch(batch_size):
     '''produce dependencies batch for training'''
@@ -90,7 +102,7 @@ def generate_batch(batch_size):
         if sentence_index >= len_total_dependecies:
             # surpass the total length of train_data
             sentence_index = sentence_index - len_total_dependecies # substract total length of train_data
-        data_in_sentence = extract_features_from_train_data(train_data[sentence_index], token2id) # extract every status' features in one sentence
+        data_in_sentence, _ = extract_features_from_train_data(train_data[sentence_index], token2id) # extract every status' features in one sentence
         sentence_index += 1 # increase dev sentence index
         batch_data += [e['features'] for e in data_in_sentence] # add several status' features
         batch_labels += [one_hot(class2label[e['op'] + ':' + e['label'][len(label_prefix):]]) for e in data_in_sentence] # add several status' labels
@@ -130,7 +142,8 @@ with graph.as_default():
 
     # cross_entropy loss function
     cross_entropy = tf.reduce_mean(
-        tf.nn.softmax_cross_entropy_with_logits(labels=train_labels, logits=y)
+#        tf.nn.softmax_cross_entropy_with_logits(labels=train_labels, logits=y)
+        tf.losses.softmax_cross_entropy(onehot_labels=train_labels, logits=y)
     )
 
     # optimizer
@@ -159,12 +172,12 @@ with graph.as_default():
 
 
 
-steps = 501
+steps = trainsteps
 with tf.Session(graph=graph) as sess:
     init.run()
     for step in range(steps):
         batch_data, batch_label = generate_batch(batch_size)
-        # every 500 steps print time and loss_function value
+        # every 500 steps print time and loss Value
         if step % 500 == 1:
             if before is None:
                 before = time()
@@ -172,11 +185,17 @@ with tf.Session(graph=graph) as sess:
                 print('finish 500 steps in {}s.'.format(time()-before))
                 before = time()
                 print(sess.run(cross_entropy, feed_dict={train_inputs:batch_data, train_labels: batch_label}))
-        sess.run(train_step, feed_dict={train_inputs: batch_data, train_labels: batch_label})
+                print('valid step start:')
+                steps = 5
+                # validation steps
+                for step in range(steps):
+                    dev_batch_data, dev_batch_label, r_deps = generate_dev_batch(valid_batch_size)
+                    print(accuracy.eval(feed_dict={train_inputs: dev_batch_data, train_labels: dev_batch_label}))
+                    prediction_labels = sess.run(tf.argmax(valid_y, 1), feed_dict={train_inputs:dev_batch_data, train_labels: dev_batch_label})
+                    for i, c in enumerate(r_deps):
+                        print('{}\t{}'.format(label2class[list(dev_batch_label[i]).index(1)],label2class[prediction_labels[i]]))
+                        pass
 
-    print('valid step:')
-    steps = 5
-    # validation steps
-    for step in range(steps):
-        dev_batch_data, dev_batch_label = generate_dev_batch(valid_batch_size)
-        print(accuracy.eval(feed_dict={train_inputs: dev_batch_data, train_labels: dev_batch_label}))
+                print('valid step stop:')
+
+        sess.run(train_step, feed_dict={train_inputs: batch_data, train_labels: batch_label})

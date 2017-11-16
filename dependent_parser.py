@@ -203,7 +203,7 @@ def extract_features_from_train_data(dependencies, token2id):
     features = extract_features_from_status_list(status_list, token2id)
     if len(stack) > 1:
         # if this is a not be able to handle scenario, return unfinished features_list
-        return features_list
+        return features_list, result_dependencies
     # else: root node
     features_list.append({'features':features, 'op':'right-arc', 'label':label_prefix + stack[-1][7]})
     arcs.append('right-arc : ' + stack[-1][7]) # root -> current root node
@@ -211,7 +211,7 @@ def extract_features_from_train_data(dependencies, token2id):
     result_dependencies[int(stack[-1][0])-1][3] = stack[-1][6] # parent (actually zero at here)
     result_dependencies[int(stack[-1][0])-1][4] = stack[-1][7] # label
     stack.pop(-1)
-    return features_list
+    return features_list, result_dependencies
 
 
 
