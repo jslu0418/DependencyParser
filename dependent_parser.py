@@ -149,6 +149,7 @@ def extract_features_from_train_data(dependencies, token2id):
     buffer = dependencies[:] # initial state, buffer has every element of given sentence
     len_total = len(buffer) # number of word tokens in current sentence
     features_list = [] # initialize features_list, this list only for debug
+    status_lists = []
     result_dependencies = [[e[0], e[1], None, None, None] for e in buffer] # for storing dependencies which have already been parsed out. Order and Word info initialized here
     right_most_child = dict() # initialize the dict for store every ele's right_most_child_index
     for i in [e[0] for e in dependencies]:
@@ -159,6 +160,7 @@ def extract_features_from_train_data(dependencies, token2id):
         # when buffer is not empty or stack has more than one element
         '''construct features for current status'''
         status_list = generate_status_list(stack, buffer, result_dependencies) # generate all words for extracing features from
+        status_lists.append(status_list)
         features = extract_features_from_status_list(status_list, token2id)
         if len(stack) > 1:
             if stack[-2][6] == stack[-1][0] : # left-arc stack[-2]'s parent is stack[-1]
@@ -201,9 +203,11 @@ def extract_features_from_train_data(dependencies, token2id):
     # when there are two cross dependencies
     status_list = generate_status_list(stack, buffer, result_dependencies) # generate all words for extracing features from
     features = extract_features_from_status_list(status_list, token2id)
+    status_lists.append(status_list)
+
     if len(stack) > 1:
         # if this is a not be able to handle scenario, return unfinished features_list
-        return features_list, result_dependencies
+        return features_list, status_lists
     # else: root node
     features_list.append({'features':features, 'op':'right-arc', 'label':label_prefix + stack[-1][7]})
     arcs.append('right-arc : ' + stack[-1][7]) # root -> current root node
@@ -211,7 +215,7 @@ def extract_features_from_train_data(dependencies, token2id):
     result_dependencies[int(stack[-1][0])-1][3] = stack[-1][6] # parent (actually zero at here)
     result_dependencies[int(stack[-1][0])-1][4] = stack[-1][7] # label
     stack.pop(-1)
-    return features_list, result_dependencies
+    return features_list, status_lists
 
 
 
