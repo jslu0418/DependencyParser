@@ -4,6 +4,7 @@ import numpy as np
 from time import time
 from prepare_data import prepare_data
 from dependent_parser import extract_features_from_train_data
+from utils import format_string, print_title
 
 pos_prefix = '<pos> :'
 label_prefix = '<label> :'
@@ -162,6 +163,7 @@ with graph.as_default():
     valid_h_1_drop = tf.nn.dropout(valid_h_1, 0.5)
     valid_y = tf.matmul(valid_h_1_drop, weights2)
 
+    # prediction label
     correct_prediction = tf.equal(tf.argmax(train_labels,1), tf.argmax(valid_y ,1))
 
     # accuracy evaluation
@@ -175,7 +177,7 @@ steps = trainsteps
 with tf.Session(graph=graph) as sess:
     init.run()
     for step in range(steps):
-        batch_data, batch_label = generate_batch(batch_size)
+        batch_data, batch_label = generate_batch(batch_size) # generate train batch
         # every 500 steps print time and loss Value
         if step % 500 == 1:
             if before is None:
@@ -183,28 +185,48 @@ with tf.Session(graph=graph) as sess:
             else:
                 print('finish 500 steps in {}s.'.format(time()-before))
                 before = time()
+                # print this step's corss_entropy
                 print(sess.run(cross_entropy, feed_dict={train_inputs:batch_data, train_labels: batch_label}))
                 print('valid step start:')
-                steps = 5
+                steps = 5 # number of validation steps
                 # validation steps
                 for step in range(steps):
                     dev_batch_data, dev_batch_label, slists = generate_dev_batch(valid_batch_size)
                     print(accuracy.eval(feed_dict={train_inputs: dev_batch_data, train_labels: dev_batch_label}))
                     prediction_labels = sess.run(tf.argmax(valid_y, 1), feed_dict={train_inputs:dev_batch_data, train_labels: dev_batch_label})
+                    cur_sentence = {}
                     for i in range(valid_batch_size):
-                        pre_label = label2class[prediction_labels[i]]
+                        if len(cur_sentence) != 0 and slists[i][0] == None:
+                            # current status list is a new sentence's initial status (stack is empty)
+                            order = list(cur_sentence.keys())
+                            # sort by key
+                            order.sort()
+                            print_title()
+                            for i in order:
+                                # print this result of dependency parsing for current sentence
+                                print(cur_sentence[i])
+                            cur_sentence = {}
+                        pre_label = label2class[prediction_labels[i]] # get prediction label's name
                         if pre_label != 'shift:' + global_null:
+                            # if not a shift operation, means this operation denote a dependency
                             arclabel = pre_label.split(':')
                             if arclabel[0] == 'left-arc':
-                                cld = slists[i][1]
-                                prt = slists[i][0]
-                                print('{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(cld[0],cld[1],cld[4],cld[6],cld[7],prt[0],arclabel[1]))
+                            # stack[-2] depends on stack[-1]
+                                cld = slists[i][1] # stack[-2]
+                                prt = slists[i][0] # stack[-1]
+                                if cld is not None and prt is not None:
+                                    # append this to cur_sentence
+                                    cur_sentence[int(cld[0])] = '{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(cld[0],format_string(cld[1]),cld[4],cld[6],format_string(cld[7]),prt[0],format_string(arclabel[1]),'Matched' if cld[6]==prt[0] else 'Not', 'Matched' if cld[7] == arclabel[1] else 'Not')
+                                    # print('{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(cld[0],cld[1],cld[4],cld[6],cld[7],prt[0],arclabel[1]))
                             else:
-                                cld = slists[i][0]
-                                prt = slists[i][1]
+                            # stack[-1] depends on stack[-2] (root dependency included at here)
+                                cld = slists[i][0] # stack[-1]
+                                prt = slists[i][1] # stack[-2]
                                 if prt is None:
-                                    prt = ['0','0']
-                                print('{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(cld[0],cld[1],cld[4],cld[6],cld[7],prt[0],arclabel[1]))
+                                    prt = ['0','0'] # parent is Root default
+                                # append this to cur_sentence
+                                cur_sentence[int(cld[0])] = '{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(cld[0],format_string(cld[1]),cld[4],cld[6],format_string(cld[7]),prt[0],format_string(arclabel[1]),'Matched' if cld[6]==prt[0] else 'UnMatch', 'Not' if cld[7] == arclabel[1] else 'Not')
+                                # print('{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(cld[0],cld[1],cld[4],cld[6],cld[7],prt[0],arclabel[1]))
                         # print('{}\t{}'.format(label2class[list(dev_batch_label[i]).index(1)],label2class[prediction_labels[i]]))
 
                 print('valid step stop')
