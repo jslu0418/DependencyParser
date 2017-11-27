@@ -148,12 +148,12 @@ with graph.as_default():
         weights2 = tf.Variable(tf.zeros([hidden_size, labels_classes_size]))
         biases2 = tf.Variable(tf.zeros([labels_classes_size])) # biases
     else:
-        w_weights = tf.Variable(tf.random_uniform([18 * 50, hidden_size],minval=0, maxval=1))
-        p_weights = tf.Variable(tf.random_uniform([18 * 50, hidden_size],minval=0, maxval=1))
-        l_weights = tf.Variable(tf.random_uniform([12 * 50, hidden_size],minval=0, maxval=1))
-        biases = tf.Variable(tf.random_uniform([hidden_size], minval=0, maxval=1)) # biases
-        weights2 = tf.Variable(tf.random_uniform([hidden_size, labels_classes_size], minval=0, maxval=1))
-        biases2 = tf.Variable(tf.random_uniform([labels_classes_size], minval=0, maxval=1)) # biases
+        w_weights = tf.Variable(tf.random_uniform([18 * 50, hidden_size]))
+        p_weights = tf.Variable(tf.random_uniform([18 * 50, hidden_size]))
+        l_weights = tf.Variable(tf.random_uniform([12 * 50, hidden_size]))
+        biases = tf.Variable(tf.random_uniform([hidden_size])) # biases
+        weights2 = tf.Variable(tf.random_uniform([hidden_size, labels_classes_size]))
+        biases2 = tf.Variable(tf.random_uniform([labels_classes_size])) # biases
     # activation function sigmoid
     h_1 = useActivation(tf.matmul(w_embeds, w_weights) + tf.matmul(p_embeds, p_weights) + tf.matmul(l_embeds, l_weights) + biases)
     # drop, deal with overfitting
@@ -181,7 +181,7 @@ with graph.as_default():
     valid_h_1 = useActivation(tf.matmul(valid_w_embeds, w_weights) + tf.matmul(valid_p_embeds, p_weights) + tf.matmul(valid_l_embeds, l_weights) + biases)
     # drop
     valid_h_1_drop = tf.nn.dropout(valid_h_1, dropout)
-    valid_y = tf.matmul(valid_h_1_drop, weights2)
+    valid_y = tf.matmul(valid_h_1_drop, weights2) + biases2
 
     # prediction label
     correct_prediction = tf.equal(tf.argmax(train_labels,1), tf.argmax(valid_y ,1))
