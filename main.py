@@ -13,26 +13,33 @@ global_unknown = '<unknown>'
 unknown_prefix = '<unknown> :'
 global_null = '<null>'
 
+def tfcube(x):
+    return tf.matmul(tf.matmul(x, tf.matrix_transpose(x)),x)
+
 dev_mode = 1
 optimizer = {'AdamOptimizer': tf.train.AdamOptimizer,'GradientDescentOptimizer': tf.train.GradientDescentOptimizer}
+activation = {'cube': tfcube, 'sigmoid': tf.nn.sigmoid, 'tanh': tf.nn.tanh, 'relu': tf.nn.relu}
 # Parameters
 batch_size = int(sys.argv[1]) # batch size
 valid_batch_size = int(sys.argv[2]) # valid batch size
-optimizerIndex=int(sys.argv[3])
-trainsteps=int(sys.argv[4])
+hidden_size = int(sys.argv[3])
+dropout = float(sys.argv[4])
+optimizerIndex = int(sys.argv[5])
+activationIndex = int(sys.argv[6])
+trainsteps = int(sys.argv[7])
+extract_feature_time = 0
+training_time = 0
 
-
-useOptimizer = optimizer['AdamOptimizer']
-for i,c in enumerate(optimizer.keys()):
-    if i == optimizerIndex:
-        useOptimizer=optimizer[c]
-
+useOptimizer = optimizer[list(optimizer.keys())[optimizerIndex]]
+useActivation = activation[list(activation.keys())[activationIndex]]
+print(useOptimizer)
+print(useActivation)
 embedding_size = 50 # embedding width
 features_size = 48 # feature size, 48 features
 
 before = time()
 train_data, token2id, id2token, embeddings_matrix = prepare_data('train') # get train data
-print('get train data in {}'.format(time()-before))
+print('get train data in {}s'.format(time()-before))
 before = None
 
 if dev_mode == 1:
@@ -94,6 +101,8 @@ def generate_dev_batch(valid_batch_size):
 
 def generate_batch(batch_size):
     '''produce dependencies batch for training'''
+    global extract_feature_time
+    before = time()
     global sentence_index # sentence_index
     batch_data = [] # initialize batch_data list
     batch_labels = [] # initialize batch_labels list
@@ -111,9 +120,11 @@ def generate_batch(batch_size):
         batch_data = batch_data[:batch_size]
         batch_labels = batch_labels[:batch_size]
         sentence_index -= 1
+    extract_feature_time = time() - before
     return batch_data, batch_labels
 
 
+# tensorflow related started here.
 graph = tf.Graph()
 with graph.as_default():
     train_inputs = tf.placeholder(tf.int32, shape=[None, features_size])
@@ -128,17 +139,26 @@ with graph.as_default():
     p_embeds = tf.reshape(p_embeds, [batch_size, 18 * 50])
     l_embeds = tf.reshape(l_embeds, [batch_size, 12 * 50])
     # weights for different kind of features
-    w_weights = tf.Variable(tf.zeros([18 * 50, 111]))
-    p_weights = tf.Variable(tf.zeros([18 * 50, 111]))
-    l_weights = tf.Variable(tf.zeros([12 * 50, 111]))
-    biases = tf.Variable(tf.zeros([111])) # biases
-    # weights for second layer
-    weights2 = tf.Variable(tf.zeros([111, labels_classes_size]))
-    # active function sigmoid
-    h_1 = tf.nn.sigmoid(tf.matmul(w_embeds, w_weights) + tf.matmul(p_embeds, p_weights) + tf.matmul(l_embeds, l_weights) + biases)
-    # drop
-    h_1_drop = tf.nn.dropout(h_1, 0.5)
-    y = tf.matmul(h_1_drop, weights2)
+    if activationIndex == 1:
+        w_weights = tf.Variable(tf.random_uniform([18 * 50, hidden_size]))
+        p_weights = tf.Variable(tf.random_uniform([18 * 50, hidden_size]))
+        l_weights = tf.Variable(tf.random_uniform([12 * 50, hidden_size]))
+        biases = tf.Variable(tf.zeros([hidden_size])) # biases
+        # weights for second layer
+        weights2 = tf.Variable(tf.zeros([hidden_size, labels_classes_size]))
+        biases2 = tf.Variable(tf.zeros([labels_classes_size])) # biases
+    else:
+        w_weights = tf.Variable(tf.random_uniform([18 * 50, hidden_size],minval=0, maxval=1))
+        p_weights = tf.Variable(tf.random_uniform([18 * 50, hidden_size],minval=0, maxval=1))
+        l_weights = tf.Variable(tf.random_uniform([12 * 50, hidden_size],minval=0, maxval=1))
+        biases = tf.Variable(tf.random_uniform([hidden_size], minval=0, maxval=1)) # biases
+        weights2 = tf.Variable(tf.random_uniform([hidden_size, labels_classes_size], minval=0, maxval=1))
+        biases2 = tf.Variable(tf.random_uniform([labels_classes_size], minval=0, maxval=1)) # biases
+    # activation function sigmoid
+    h_1 = useActivation(tf.matmul(w_embeds, w_weights) + tf.matmul(p_embeds, p_weights) + tf.matmul(l_embeds, l_weights) + biases)
+    # drop, deal with overfitting
+    h_1_drop = tf.nn.dropout(h_1, dropout)
+    y = tf.matmul(h_1_drop, weights2) + biases2
 
     # cross_entropy loss function
     cross_entropy = tf.reduce_mean(
@@ -147,7 +167,7 @@ with graph.as_default():
     )
 
     # optimizer
-    train_step = optimizer['AdamOptimizer'](0.001).minimize(cross_entropy)
+    train_step = useOptimizer(0.01).minimize(cross_entropy)
 
     # valid part
     valid_embeds = tf.nn.embedding_lookup(embeddings_matrix , train_inputs)
@@ -158,9 +178,9 @@ with graph.as_default():
     valid_p_embeds = tf.reshape(valid_p_embeds, [valid_batch_size, 18 * 50])
     valid_l_embeds = tf.reshape(valid_l_embeds, [valid_batch_size, 12 * 50])
     # active function sigmoid
-    valid_h_1 = tf.nn.sigmoid(tf.matmul(valid_w_embeds, w_weights) + tf.matmul(valid_p_embeds, p_weights) + tf.matmul(valid_l_embeds, l_weights) + biases)
+    valid_h_1 = useActivation(tf.matmul(valid_w_embeds, w_weights) + tf.matmul(valid_p_embeds, p_weights) + tf.matmul(valid_l_embeds, l_weights) + biases)
     # drop
-    valid_h_1_drop = tf.nn.dropout(valid_h_1, 0.5)
+    valid_h_1_drop = tf.nn.dropout(valid_h_1, dropout)
     valid_y = tf.matmul(valid_h_1_drop, weights2)
 
     # prediction label
@@ -194,6 +214,7 @@ with tf.Session(graph=graph) as sess:
                     dev_batch_data, dev_batch_label, slists = generate_dev_batch(valid_batch_size)
                     print(accuracy.eval(feed_dict={train_inputs: dev_batch_data, train_labels: dev_batch_label}))
                     prediction_labels = sess.run(tf.argmax(valid_y, 1), feed_dict={train_inputs:dev_batch_data, train_labels: dev_batch_label})
+
                     cur_sentence = {}
                     for i in range(valid_batch_size):
                         if len(cur_sentence) != 0 and slists[i][0] == None:
@@ -217,7 +238,6 @@ with tf.Session(graph=graph) as sess:
                                 if cld is not None and prt is not None:
                                     # append this to cur_sentence
                                     cur_sentence[int(cld[0])] = '{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(cld[0],format_string(cld[1]),cld[4],cld[6],format_string(cld[7]),prt[0],format_string(arclabel[1]),'Matched' if cld[6]==prt[0] else 'Not', 'Matched' if cld[7] == arclabel[1] else 'Not')
-                                    # print('{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(cld[0],cld[1],cld[4],cld[6],cld[7],prt[0],arclabel[1]))
                             else:
                             # stack[-1] depends on stack[-2] (root dependency included at here)
                                 cld = slists[i][0] # stack[-1]
@@ -225,10 +245,10 @@ with tf.Session(graph=graph) as sess:
                                 if prt is None:
                                     prt = ['0','0'] # parent is Root default
                                 # append this to cur_sentence
-                                cur_sentence[int(cld[0])] = '{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(cld[0],format_string(cld[1]),cld[4],cld[6],format_string(cld[7]),prt[0],format_string(arclabel[1]),'Matched' if cld[6]==prt[0] else 'UnMatch', 'Not' if cld[7] == arclabel[1] else 'Not')
-                                # print('{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(cld[0],cld[1],cld[4],cld[6],cld[7],prt[0],arclabel[1]))
-                        # print('{}\t{}'.format(label2class[list(dev_batch_label[i]).index(1)],label2class[prediction_labels[i]]))
+                                if cld is not None:
+                                    cur_sentence[int(cld[0])] = '{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(cld[0],format_string(cld[1]),cld[4],cld[6],format_string(cld[7]),prt[0],format_string(arclabel[1]),'Matched' if cld[6]==prt[0] else 'UnMatch', 'Not' if cld[7] == arclabel[1] else 'Not')
 
                 print('valid step stop')
 
         sess.run(train_step, feed_dict={train_inputs: batch_data, train_labels: batch_label})
+    print('extract feature total used {}s, feature for every 500 steps use {}s.'.format(extract_feature_time, extract_feature_time*500/trainsteps))
