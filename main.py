@@ -17,16 +17,17 @@ def tfcube(x):
     return tf.matmul(tf.matmul(x, tf.matrix_transpose(x)),x)
 
 dev_mode = 1
-optimizer = {'AdamOptimizer': tf.train.AdamOptimizer,'GradientDescentOptimizer': tf.train.GradientDescentOptimizer}
+optimizer = {'AdamOptimizer': tf.train.AdamOptimizer,'GradientDescentOptimizer': tf.train.GradientDescentOptimizer, 'AdagradOptimizer': tf.train.AdagradOptimizer}
 activation = {'cube': tfcube, 'sigmoid': tf.nn.sigmoid, 'tanh': tf.nn.tanh, 'relu': tf.nn.relu}
 # Parameters
 batch_size = int(sys.argv[1]) # batch size
 valid_batch_size = int(sys.argv[2]) # valid batch size
-hidden_size = int(sys.argv[3])
-dropout = float(sys.argv[4])
-optimizerIndex = int(sys.argv[5])
-activationIndex = int(sys.argv[6])
-trainsteps = int(sys.argv[7])
+hidden_size = int(sys.argv[3]) # hidden node
+dropout = float(sys.argv[4]) # dropout
+learning_rate = float(sys.argv[5]) # learning rate
+optimizerIndex = int(sys.argv[6]) # which optimizer
+activationIndex = int(sys.argv[7]) # which activation function
+trainsteps = int(sys.argv[8]) # # of train steps
 extract_feature_time = 0
 training_time = 0
 
@@ -140,20 +141,18 @@ with graph.as_default():
     l_embeds = tf.reshape(l_embeds, [batch_size, 12 * 50])
     # weights for different kind of features
     if activationIndex == 1:
-        w_weights = tf.Variable(tf.random_uniform([18 * 50, hidden_size]))
-        p_weights = tf.Variable(tf.random_uniform([18 * 50, hidden_size]))
-        l_weights = tf.Variable(tf.random_uniform([12 * 50, hidden_size]))
-        biases = tf.Variable(tf.zeros([hidden_size])) # biases
-        # weights for second layer
+        w_weights = tf.Variable(tf.zeros([18 * 50, hidden_size]))
+        p_weights = tf.Variable(tf.zeros([18 * 50, hidden_size]))
+        l_weights = tf.Variable(tf.zeros([12 * 50, hidden_size]))
         weights2 = tf.Variable(tf.zeros([hidden_size, labels_classes_size]))
-        biases2 = tf.Variable(tf.zeros([labels_classes_size])) # biases
     else:
-        w_weights = tf.Variable(tf.random_uniform([18 * 50, hidden_size]))
-        p_weights = tf.Variable(tf.random_uniform([18 * 50, hidden_size]))
-        l_weights = tf.Variable(tf.random_uniform([12 * 50, hidden_size]))
-        biases = tf.Variable(tf.random_uniform([hidden_size])) # biases
-        weights2 = tf.Variable(tf.random_uniform([hidden_size, labels_classes_size]))
-        biases2 = tf.Variable(tf.random_uniform([labels_classes_size])) # biases
+        w_weights = tf.Variable(tf.random_normal([18 * 50, hidden_size], stddev=1/18/50))
+        p_weights = tf.Variable(tf.random_normal([18 * 50, hidden_size], stddev=1/18/50))
+        l_weights = tf.Variable(tf.random_normal([12 * 50, hidden_size], stddev=1/12/50))
+        weights2 = tf.Variable(tf.random_normal([hidden_size, labels_classes_size], stddev=1/hidden_size))
+    biases = tf.Variable(tf.zeros([hidden_size])) # biases
+    # weights for second layer
+    biases2 = tf.Variable(tf.zeros([labels_classes_size])) # biases
     # activation function sigmoid
     h_1 = useActivation(tf.matmul(w_embeds, w_weights) + tf.matmul(p_embeds, p_weights) + tf.matmul(l_embeds, l_weights) + biases)
     # drop, deal with overfitting
@@ -167,7 +166,7 @@ with graph.as_default():
     )
 
     # optimizer
-    train_step = useOptimizer(0.01).minimize(cross_entropy)
+    train_step = useOptimizer(learning_rate).minimize(cross_entropy)
 
     # valid part
     valid_embeds = tf.nn.embedding_lookup(embeddings_matrix , train_inputs)
