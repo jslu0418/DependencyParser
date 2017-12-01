@@ -207,9 +207,9 @@ with graph.as_default():
     # weights for second layer
 #    biases2 = tf.Variable(tf.zeros([labels_classes_size])) # biases
     # activation function sigmoid
-#    h_1 = useActivation(tf.matmul(w_embeds, w_weights) + tf.matmul(p_embeds, p_weights) + tf.matmul(l_embeds, l_weights) + biases)
+    h_1 = useActivation(tf.matmul(w_embeds, w_weights) + tf.matmul(p_embeds, p_weights) + tf.matmul(l_embeds, l_weights) + biases)
 #    h_1 = useActivation(tf.matmul(w_embeds, w_weights) + tf.matmul(p_embeds, p_weights) + biases)
-    h_1 = useActivation(tf.matmul(w_embeds, w_weights) + tf.matmul(l_embeds, l_weights) + biases)
+#    h_1 = useActivation(tf.matmul(w_embeds, w_weights) + tf.matmul(l_embeds, l_weights) + biases)
 #    h_1 = useActivation(tf.matmul(w_embeds, w_weights) + biases)
     # drop, deal with overfitting
     h_1_drop = tf.nn.dropout(h_1, dropout)
@@ -234,9 +234,9 @@ with graph.as_default():
     valid_p_embeds = tf.reshape(valid_p_embeds, [valid_batch_size, 18 * 50])
     valid_l_embeds = tf.reshape(valid_l_embeds, [valid_batch_size, 12 * 50])
     # active function sigmoid
-#    valid_h_1 = useActivation(tf.matmul(valid_w_embeds, w_weights) + tf.matmul(valid_p_embeds, p_weights) + tf.matmul(valid_l_embeds, l_weights) + biases)
+    valid_h_1 = useActivation(tf.matmul(valid_w_embeds, w_weights) + tf.matmul(valid_p_embeds, p_weights) + tf.matmul(valid_l_embeds, l_weights) + biases)
 #    valid_h_1 = useActivation(tf.matmul(valid_w_embeds, w_weights) + tf.matmul(valid_p_embeds, p_weights) + biases)
-    valid_h_1 = useActivation(tf.matmul(valid_w_embeds, w_weights) + tf.matmul(valid_l_embeds, l_weights) + biases)
+#    valid_h_1 = useActivation(tf.matmul(valid_w_embeds, w_weights) + tf.matmul(valid_l_embeds, l_weights) + biases)
 #    valid_h_1 = useActivation(tf.matmul(valid_w_embeds, w_weights) + biases)
     # drop
     valid_h_1_drop = tf.nn.dropout(valid_h_1, dropout)
@@ -333,11 +333,10 @@ with tf.Session(graph=graph) as sess:
                 order = list(cur_sentence.keys())
                 # sort by key
                 order.sort()
-                #print_title()
+                print_title()
                 for i in order:
                     # print this result of dependency parsing for current sentence
-          #          print(cur_sentence[i])
-                    pass
+                    print(cur_sentence[i])
                 cur_sentence = {}
             pre_label = label2class[prediction_labels[i]] # get prediction label's name
             if pre_label != 'shift:' + global_null:
