@@ -97,7 +97,7 @@ def generate_test_batch(valid_batch_size):
         if test_sentence_index >= len_test_sentences:
             # surpass the total length of dev_data
             test_sentence_index = test_sentence_index - len_test_sentences # substract total length of dev_data
-        data_in_sentence, one_status_lists = extract_features_from_train_data(dev_data[test_sentence_index], token2id) # extract every status' features in one sentence
+        data_in_sentence, one_status_lists = extract_features_from_train_data(test_data[test_sentence_index], token2id) # extract every status' features in one sentence
         test_sentence_index += 1 # increase dev sentence index
         batch_data += [e['features'] for e in data_in_sentence] # add several status' features
         batch_labels += [one_hot(class2label[e['op'] + ':' + e['label'][len(label_prefix):]]) for e in data_in_sentence] # add several status' labels
@@ -327,7 +327,7 @@ with tf.Session(graph=graph) as sess:
                 order = list(cur_sentence.keys())
                 # sort by key
                 order.sort()
-                print_title()
+                #print_title()
                 for i in order:
                     # print this result of dependency parsing for current sentence
           #          print(cur_sentence[i])
@@ -383,7 +383,7 @@ with tf.Session(graph=graph) as sess:
                 order = list(cur_sentence.keys())
                 # sort by key
                 order.sort()
-                print_title()
+                #print_title()
                 for i in order:
                     # print this result of dependency parsing for current sentence
                    # print(cur_sentence[i])
