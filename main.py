@@ -82,6 +82,34 @@ def one_hot(i):
     return a
 
 
+test_sentence_index = 0
+len_test_sentences = len(test_data)
+
+
+def generate_test_batch(valid_batch_size):
+    '''produce dependencies batch for deving'''
+    global test_sentence_index # test_sentence_index
+    batch_data = [] # initialize batch_data list
+    batch_labels = [] # initialize batch_labels list
+    status_lists = [] # this batch statuslists
+    while len(batch_data) < valid_batch_size:
+        # batch_data's length less than goal
+        if test_sentence_index >= len_test_sentences:
+            # surpass the total length of dev_data
+            test_sentence_index = test_sentence_index - len_test_sentences # substract total length of dev_data
+        data_in_sentence, one_status_lists = extract_features_from_train_data(dev_data[test_sentence_index], token2id) # extract every status' features in one sentence
+        test_sentence_index += 1 # increase dev sentence index
+        batch_data += [e['features'] for e in data_in_sentence] # add several status' features
+        batch_labels += [one_hot(class2label[e['op'] + ':' + e['label'][len(label_prefix):]]) for e in data_in_sentence] # add several status' labels
+        status_lists = status_lists + one_status_lists
+    if len(batch_data) > valid_batch_size:
+        # if over 2048, delete redundant
+        batch_data = batch_data[:valid_batch_size]
+        batch_labels = batch_labels[:valid_batch_size]
+        test_sentence_index -= 1
+    return batch_data, batch_labels, status_lists
+
+
 def generate_dev_batch(valid_batch_size):
     '''produce dependencies batch for deving'''
     global dev_sentence_index # dev_sentence_index
@@ -135,9 +163,7 @@ print("dev data size: {}".format(len(dev_data)))
 print("test data size: {}".format(len(test_data_set)))
 
 test_rst = []
-test_sentence_index = 0
-len_test_sentences = len(test_data)
-def generate_test_batch(size):
+def generate_test1_batch(size):
     batch_data = [] # initialize batch_data list
     batch_index = [] # initialize index for this data
     global test_sentence_index
@@ -250,44 +276,10 @@ with tf.Session(graph=graph) as sess:
                 print('valid step start:')
                 steps = 5 # number of validation steps
                 # validation steps
-                sumacc = 0
+                sumacc=0
                 for step in range(steps):
                     dev_batch_data, dev_batch_label, slists = generate_dev_batch(valid_batch_size)
                     sumacc+=accuracy.eval(feed_dict={train_inputs: dev_batch_data, train_labels: dev_batch_label})
-                    # prediction_labels = sess.run(tf.argmax(valid_y, 1), feed_dict={train_inputs:dev_batch_data, train_labels: dev_batch_label})
-
-                    # cur_sentence = {}
-                    # for i in range(valid_batch_size):
-                    #     if len(cur_sentence) != 0 and slists[i][0] == None:
-                    #         # current status list is a new sentence's initial status (stack is empty)
-                    #         order = list(cur_sentence.keys())
-                    #         # sort by key
-                    #         order.sort()
-                    #         print_title()
-                    #         for i in order:
-                    #             # print this result of dependency parsing for current sentence
-                    #             print(cur_sentence[i])
-                    #         cur_sentence = {}
-                    #     pre_label = label2class[prediction_labels[i]] # get prediction label's name
-                    #     if pre_label != 'shift:' + global_null:
-                    #         # if not a shift operation, means this operation denote a dependency
-                    #         arclabel = pre_label.split(':')
-                    #         if arclabel[0] == 'left-arc':
-                    #         # stack[-2] depends on stack[-1]
-                    #             cld = slists[i][1] # stack[-2]
-                    #             prt = slists[i][0] # stack[-1]
-                    #             if cld is not None and prt is not None:
-                    #                 # append this to cur_sentence
-                    #                 cur_sentence[int(cld[0])] = '{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(cld[0],format_string(cld[1]),cld[4],cld[6],format_string(cld[7]),prt[0],format_string(arclabel[1]),'Matched' if cld[6]==prt[0] else 'Not', 'Matched' if cld[7] == arclabel[1] else 'Not')
-                    #         else:
-                    #         # stack[-1] depends on stack[-2] (root dependency included at here)
-                    #             cld = slists[i][0] # stack[-1]
-                    #             prt = slists[i][1] # stack[-2]
-                    #             if prt is None:
-                    #                 prt = ['0','0'] # parent is Root default
-                    #             # append this to cur_sentence
-                    #             if cld is not None:
-                    #                 cur_sentence[int(cld[0])] = '{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(cld[0],format_string(cld[1]),cld[4],cld[6],format_string(cld[7]),prt[0],format_string(arclabel[1]),'Matched' if cld[6]==prt[0] else 'UnMatch', 'Not' if cld[7] == arclabel[1] else 'Not')
 
                 print('average accuracy of 5 steps: {}'.format(sumacc/5))
                 print('valid step stop')
@@ -295,7 +287,7 @@ with tf.Session(graph=graph) as sess:
         sess.run(train_step, feed_dict={train_inputs: batch_data, train_labels: batch_label})
     # print('extract feature total used {}s, feature for every 500 steps use {}s.'.format(extract_feature_time, extract_feature_time*500/trainsteps))
 
-    while len(test_rst) < len(test_data):
+    # while len(test_rst) < len(test_data):
         # test_batch_data, test_idx = generate_test_batch(test_batch_size)
         # pres = sess.run(tf.argmax(valid_y, 1), feed_dict={train_inputs:test_batch_data, train_labels: [[0]*79]})
         # for idx in (len(pres)):
@@ -303,19 +295,130 @@ with tf.Session(graph=graph) as sess:
         #     if rt == -1:
         #         test_rst.append(test_data_set[test_idx[idx]])
 
-    print(test_rst[1].ori_stc)
-    print(test_rst[1].rst)
+    # print(test_rst[1].ori_stc)
+    # print(test_rst[1].rst)
+    # sum_uas = 0
+    # total_uas = 0
+    # sum_las = 0
+    # total_las = 0
+    # for idx1 in range(len(test_data_set)):
+    #     for idx2 in range(len(test_data_set[idx1].ori_stc)):
+    #         total_las += 1
+    #         total_uas += 1
+    #         if test_data_set[idx1].ori_stc[idx2][6] == test_data_set[idx1].rst[idx2][3]:
+    #             sum_uas += 1
+    #             if test_data_set[idx1].ori_stc[idx2][7] == test_data_set[idx1].rst[idx2][4]:
+    #                 sum_las += 1
+    # print('UAS accuracy: {} / {}'.format(sum_uas, total_las))
+    # print('LAS accuracy: {} / {}'.format(sum_las, total_las))
+
+    steps = 500
     sum_uas = 0
-    total_uas = 0
     sum_las = 0
-    total_las = 0
-    for idx1 in range(len(test_data_set)):
-        for idx2 in range(len(test_data_set[idx1].ori_stc)):
-            total_las += 1
-            total_uas += 1
-            if test_data_set[idx1].ori_stc[idx2][6] == test_data_set[idx1].rst[idx2][3]:
-                sum_uas += 1
-                if test_data_set[idx1].ori_stc[idx2][7] == test_data_set[idx1].rst[idx2][4]:
-                    sum_las += 1
-    print('UAS accuracy: {} / {}'.format(sum_uas, total_las))
-    print('LAS accuracy: {} / {}'.format(sum_las, total_las))
+    total_uas = 0
+    for step in range(steps):
+        dev_batch_data, dev_batch_label, slists = generate_dev_batch(valid_batch_size)
+        prediction_labels = sess.run(tf.argmax(valid_y, 1), feed_dict={train_inputs:dev_batch_data, train_labels: dev_batch_label})
+
+        cur_sentence = {}
+        for i in range(valid_batch_size):
+            if len(cur_sentence) != 0 and slists[i][0] == None:
+                # current status list is a new sentence's initial status (stack is empty)
+                order = list(cur_sentence.keys())
+                # sort by key
+                order.sort()
+                print_title()
+                for i in order:
+                    # print this result of dependency parsing for current sentence
+          #          print(cur_sentence[i])
+                    pass
+                cur_sentence = {}
+            pre_label = label2class[prediction_labels[i]] # get prediction label's name
+            if pre_label != 'shift:' + global_null:
+                total_uas += 1
+                # if not a shift operation, means this operation denote a dependency
+                arclabel = pre_label.split(':')
+                if arclabel[0] == 'left-arc':
+                    # stack[-2] depends on stack[-1]
+                    cld = slists[i][1] # stack[-2]
+                    prt = slists[i][0] # stack[-1]
+                    if cld is not None and prt is not None:
+                        # append this to cur_sentence
+                        cur_sentence[int(cld[0])] = '{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(cld[0],format_string(cld[1]),cld[4],cld[6],format_string(cld[7]),prt[0],format_string(arclabel[1]),'Matched' if cld[6]==prt[0] else 'Not', 'Matched' if cld[7] == arclabel[1] else 'Not')
+                        if cld[6]==prt[0]:
+                            sum_uas += 1
+                            if cld[7] == arclabel[1]:
+                                sum_las +=1
+                else:
+                    # stack[-1] depends on stack[-2] (root dependency included at here)
+                    cld = slists[i][0] # stack[-1]
+                    prt = slists[i][1] # stack[-2]
+                    if prt is None:
+                        prt = ['0','0'] # parent is Root default
+                        # append this to cur_sentence
+                    if cld is not None:
+                        cur_sentence[int(cld[0])] = '{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(cld[0],format_string(cld[1]),cld[4],cld[6],format_string(cld[7]),prt[0],format_string(arclabel[1]),'Matched' if cld[6]==prt[0] else 'UnMatch', 'Not' if cld[7] == arclabel[1] else 'Not')
+                        if cld[6]==prt[0]:
+                            sum_uas += 1
+                            if cld[7] == arclabel[1]:
+                                sum_las +=1
+
+
+    print('{}\t{}\t{}\t{}\t{}'.format('Cor_uas','Cor_las','Tot_l','Pre_uas','Pre_las'))
+    print('{}\t{}\t{}\t{}\t{}'.format(sum_uas, sum_las, total_uas, sum_uas/total_uas, sum_las/total_uas))
+
+
+
+    sum_uas = 0
+    sum_las = 0
+    total_uas = 0
+    for step in range(steps):
+        dev_batch_data, dev_batch_label, slists = generate_test_batch(valid_batch_size)
+        prediction_labels = sess.run(tf.argmax(valid_y, 1), feed_dict={train_inputs:dev_batch_data, train_labels: dev_batch_label})
+
+        cur_sentence = {}
+        for i in range(valid_batch_size):
+            if len(cur_sentence) != 0 and slists[i][0] == None:
+                # current status list is a new sentence's initial status (stack is empty)
+                order = list(cur_sentence.keys())
+                # sort by key
+                order.sort()
+                print_title()
+                for i in order:
+                    # print this result of dependency parsing for current sentence
+                   # print(cur_sentence[i])
+                    pass
+                cur_sentence = {}
+            pre_label = label2class[prediction_labels[i]] # get prediction label's name
+            if pre_label != 'shift:' + global_null:
+                total_uas += 1
+                # if not a shift operation, means this operation denote a dependency
+                arclabel = pre_label.split(':')
+                if arclabel[0] == 'left-arc':
+                    # stack[-2] depends on stack[-1]
+                    cld = slists[i][1] # stack[-2]
+                    prt = slists[i][0] # stack[-1]
+                    if cld is not None and prt is not None:
+                        # append this to cur_sentence
+                        cur_sentence[int(cld[0])] = '{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(cld[0],format_string(cld[1]),cld[4],cld[6],format_string(cld[7]),prt[0],format_string(arclabel[1]),'Matched' if cld[6]==prt[0] else 'Not', 'Matched' if cld[7] == arclabel[1] else 'Not')
+                        if cld[6]==prt[0]:
+                            sum_uas += 1
+                            if cld[7] == arclabel[1]:
+                                sum_las +=1
+                else:
+                    # stack[-1] depends on stack[-2] (root dependency included at here)
+                    cld = slists[i][0] # stack[-1]
+                    prt = slists[i][1] # stack[-2]
+                    if prt is None:
+                        prt = ['0','0'] # parent is Root default
+                        # append this to cur_sentence
+                    if cld is not None:
+                        cur_sentence[int(cld[0])] = '{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(cld[0],format_string(cld[1]),cld[4],cld[6],format_string(cld[7]),prt[0],format_string(arclabel[1]),'Matched' if cld[6]==prt[0] else 'Not', 'Matched' if cld[7] == arclabel[1] else 'Not')
+                        if cld[6]==prt[0]:
+                            sum_uas += 1
+                            if cld[7] == arclabel[1]:
+                                sum_las +=1
+
+
+    print('{}\t{}\t{}\t{}\t{}'.format('Cor_uas','Cor_las','Tot_l','Pre_uas','Pre_las'))
+    print('{}\t{}\t{}\t{}\t{}'.format(sum_uas, sum_las, total_uas, sum_uas/total_uas, sum_las/total_uas))
