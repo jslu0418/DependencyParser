@@ -139,6 +139,7 @@ def extract_features_from_status_list(status_list, token2id):
                 # only when current element is from result_dependencies
                 l_features.append(token2id[label_prefix + global_null])
     features = w_features + p_features + l_features # concat three kinds of features
+    # print(features)
     return features
 
 
@@ -217,6 +218,66 @@ def extract_features_from_train_data(dependencies, token2id):
     stack.pop(-1)
     return features_list, status_lists
 
+
+class Teststc(object):
+    idx = None
+    ori_stc = None
+    stk = []
+    buf = []
+    rst = []
+
+    def __init__(self, stc, idx):
+        self.idx = idx
+        self.ori_stc = stc[:]
+        self.stk.append(stc[0])
+        self.buf = self.buf + stc[1:len(stc)]
+        self.rst = []
+        for i in range(len(self.ori_stc)):
+            e=self.ori_stc[i]
+            self.rst.append([e[0], e[1], e[4], None, None])
+
+    def trans(self, op):
+        if len(self.stk) ==0 and len(self.buf) == 0:
+            return -1
+        if op == 'shift:' + global_null:
+            if len(self.buf) != 0:
+                self.stk.append(self.buf.pop(0))
+                return 0
+            else:
+                if len(self.stk) == 1:
+                    op = 'right-arc:' + 'root'
+                else:
+                    op = 'left-arc:' + global_null
+        if len(self.stk) < 2 and len(self.buf) > 0:
+            self.stk.append(self.buf.pop(0))
+            return 0
+        if len(self.stk) == 1 and len(self.buf) == 0:
+            self.rst[int(self.stk[-1][0])-1][3] = '0'
+            self.rst[int(self.stk[-1][0])-1][4] = 'root'
+            self.stk.pop(-1)
+            return 0
+        pre_arc = op.split(':')
+        if pre_arc[0] == 'left-arc':
+            tmp = self.stk.pop(-2)
+            self.rst[int(tmp[0])-1][3] = self.stk[-1][0]
+            self.rst[int(tmp[0])-1][4] = pre_arc[1]
+            return 0
+        tmp = self.stk.pop(-1)
+        self.rst[int(tmp[0])-1][3] = self.stk[-1][0]
+        self.rst[int(tmp[0])-1][4] = pre_arc[1]
+        return 0
+
+    def features(self, token2id):
+        if len(self.stk) ==0 and len(self.buf) == 0:
+            return [0]*48
+        return extract_features_from_status_list(generate_status_list(self.stk, self.buf, self.rst), token2id)
+
+
+def process_test_data(test_data):
+    r = []
+    for e in test_data:
+        r.append(Teststc(e,len(r)))
+    return r
 
 
 def result2graph(dependencies):
